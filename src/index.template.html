@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dungeon Crawl Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/*@@CSS@@*/
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 id="title">Dungeon Crawl · Floor 1</h1>
+  <span class="live">LIVE</span>
+  <div class="chips">
+    <div class="chip"><span>Views</span><b id="views">0</b></div>
+    <div class="chip"><span>Followers</span><b id="fols">0</b></div>
+    <div class="chip"><span>Kills</span><b id="kills">0</b></div>
+    <div class="chip timer" id="timerChip"><span>Stairwells close in</span><b id="timer">0 turns</b></div>
+  </div>
+</header>
+
+<main class="game">
+  <section class="stage">
+    <div class="fig" id="fig"><canvas id="cv" aria-label="Dungeon map"></canvas><div class="toast" id="toast"></div><div class="tip" id="tip" hidden></div><canvas id="mini" aria-label="Minimap. Click to expand." title="Minimap (M to expand)"></canvas></div>
+    <div id="log" aria-live="polite"></div>
+  </section>
+
+  <aside class="panel">
+    <div class="card">
+      <div class="row"><h2 id="hName">Carl</h2><span class="lvl" id="hLvl">Level 1</span></div>
+      <div class="meter"><span>HP</span><div class="bar"><i id="hpBar" style="background:var(--hp)"></i></div><b id="hpTxt"></b></div>
+      <div class="meter"><span>MP</span><div class="bar"><i id="hmpBar" style="background:var(--mp)"></i></div><b id="hmpTxt"></b></div>
+      <div class="meter"><span>XP</span><div class="bar"><i id="xpBar" style="background:var(--xp)"></i></div><b id="xpTxt"></b></div>
+      <div class="stats" id="hStats"></div>
+      <p class="pts" id="pts"></p>
+      <dl class="gear" id="hGear"></dl>
+      <div class="boxes" id="hBoxes"></div>
+    </div>
+
+    <div class="card">
+      <div class="row"><h2 id="pName">Companion</h2><span class="lvl" id="pLvl"></span></div>
+      <div class="meter"><span>HP</span><div class="bar"><i id="pBar" style="background:#ff7ab6"></i></div><b id="pTxt"></b></div>
+      <div class="meter"><span>MP</span><div class="bar"><i id="pmpBar" style="background:var(--mp)"></i></div><b id="pmpTxt"></b></div>
+      <div class="meter"><span>XP</span><div class="bar"><i id="pxBar" style="background:var(--xp)"></i></div><b id="pxTxt"></b></div>
+      <div class="stats" id="pStats"></div>
+      <p class="pts" id="pPts"></p>
+      <dl class="gear" id="pGear"></dl>
+      <div class="boxes" id="pBoxes"></div>
+    </div>
+
+    <div class="card">
+      <h3>Actions</h3>
+      <div class="acts">
+        <button data-act="quaff">Potion <em id="cPot"></em><kbd>Q</kbd></button>
+        <button data-act="heal">Heal <em id="cHeal"></em><kbd>C</kbd></button>
+        <button data-act="missile" id="bMis" hidden>Missile <em id="cMis"></em><kbd>F</kbd></button>
+        <button data-act="bomb">Bomb <em id="cBomb"></em><kbd>T</kbd></button>
+        <button data-act="map">Map <em id="cMap">small</em><kbd>M</kbd></button>
+        <button data-act="rest">Rest<kbd>R</kbd></button>
+        <button data-act="open">Open boxes <em id="cBox"></em><kbd>O</kbd></button>
+        <button data-act="descend">Take stairs<kbd>&gt;</kbd></button>
+      </div>
+    </div>
+
+    <div class="card padcard">
+      <div class="pad" id="pad">
+        <button data-dir="-1,-1" aria-label="Move up-left">↖</button><button data-dir="0,-1" aria-label="Move up">↑</button><button data-dir="1,-1" aria-label="Move up-right">↗</button>
+        <button data-dir="-1,0" aria-label="Move left">←</button><button data-dir="0,0" aria-label="Wait a turn">·</button><button data-dir="1,0" aria-label="Move right">→</button>
+        <button data-dir="-1,1" aria-label="Move down-left">↙</button><button data-dir="0,1" aria-label="Move down">↓</button><button data-dir="1,1" aria-label="Move down-right">↘</button>
+      </div>
+      <button class="linkbtn" data-act="help">How to play <kbd>?</kbd></button>
+    </div>
+  </aside>
+</main>
+
+<div class="modal" id="modal" hidden><div class="mcard" id="mcard" role="dialog" aria-modal="true"></div></div>
+
+<script>
+/*@@JS@@*/
+</script>
+</body>
+</html>

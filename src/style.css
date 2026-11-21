@@ -1,0 +1,695 @@
+/* VOICE: a crude, cheerful death-game broadcast; snark up top, danger underneath
+   IDEA: the screen is the show's live feed of one crawler's run
+   PICTURE: the tiled dungeon map itself, torch-lit, filling the stage
+   COLOUR and TYPE: deep plum stone, warm safe-room amber, cyan stairwells, hot-pink broadcast accent; Chakra Petch + Rubik
+   LAYOUT: broadcast strip on top, map left with log beneath, crawler sheet right; stacks map, pad, sheet on narrow screens */
+:root {
+  color-scheme: dark;
+  --bg: #170f1f;
+  --panel: #231831;
+  --line: #3a2b4c;
+  --ink: #f1e9f8;
+  --mute: #a897bb;
+  --pink: #ff3d7f;
+  --teal: #5fe0d0;
+  --amber: #f5c542;
+  --hp: #ff5a6e;
+  --xp: #8f7bff;
+  --mp: #4fb3ff;
+}
+:root[data-theme='light'],
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+  min-width: 0;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    16px/1.5 Rubik,
+    system-ui,
+    sans-serif;
+  overflow-x: clip;
+}
+h1,
+h2,
+h3 {
+  font-family: 'Chakra Petch', Rubik, sans-serif;
+  margin: 0;
+  line-height: 1.05;
+}
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 14px max(2vw, 14px);
+  background: #120a19;
+  border-bottom: 1px solid var(--line);
+}
+.top h1 {
+  font-size: clamp(22px, 3vw, 32px);
+  font-weight: 700;
+}
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--pink);
+  color: #fff;
+  font: 700 13px 'Chakra Petch';
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.live::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: pulse 1.4s infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-left: auto;
+  align-items: baseline;
+}
+.chip {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+.chip span {
+  font-size: 13px;
+  color: var(--mute);
+}
+.chip b {
+  font: 700 20px 'Chakra Petch';
+  white-space: nowrap;
+}
+.chip.timer b {
+  font-size: 26px;
+  color: var(--teal);
+}
+.chip.timer.warn b {
+  color: var(--hp);
+}
+.game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 16px;
+  padding: 16px max(2vw, 14px);
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.stage {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.fig {
+  position: relative;
+  height: clamp(360px, 64vh, 760px);
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #0d0912;
+  touch-action: manipulation;
+}
+.fig canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.fig.danger {
+  box-shadow: 0 0 0 2px var(--hp) inset;
+}
+.toast {
+  position: absolute;
+  left: 50%;
+  top: 14px;
+  transform: translate(-50%, -20px);
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(18, 10, 25, 0.94);
+  border: 1px solid var(--pink);
+  border-radius: 12px;
+  padding: 10px 16px;
+  max-width: min(460px, 90%);
+  text-align: center;
+  transition: 0.35s;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.toast small {
+  display: block;
+  color: var(--pink);
+  font: 700 13px 'Chakra Petch';
+}
+.toast b {
+  font: 700 18px 'Chakra Petch';
+}
+.tip {
+  position: absolute;
+  z-index: 3;
+  width: min(300px, calc(100% - 16px));
+  background: rgba(18, 10, 25, 0.96);
+  border: 1px solid #5a4378;
+  border-radius: 12px;
+  padding: 12px 14px;
+  pointer-events: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  font-size: 14px;
+}
+.tip[hidden] {
+  display: none;
+}
+.fig #mini[hidden] {
+  display: none;
+}
+.fig #mini {
+  position: absolute;
+  inset: auto 10px 10px auto;
+  z-index: 2;
+  border: 1px solid #4a5a75;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #141821;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  touch-action: manipulation;
+}
+.tip h4 {
+  margin: 0;
+  font: 700 18px 'Chakra Petch';
+  color: var(--amber);
+}
+.tip h4.boss {
+  color: var(--pink);
+}
+.tip .lvlline {
+  font: 600 14px Rubik;
+  margin-top: 2px;
+}
+.tip .role {
+  font-size: 13px;
+  color: #ffd0e2;
+  margin-top: 3px;
+}
+.tip .meta {
+  color: var(--mute);
+  font-size: 13px;
+  margin: 2px 0 8px;
+}
+.lt {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 99px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.lt.hard {
+  background: #ff5a6e;
+  color: #200;
+}
+.lt.tough {
+  background: #f5c542;
+  color: #2a1a00;
+}
+.lt.easy {
+  background: #3a2b4c;
+  color: var(--mute);
+}
+.tip .tstats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+  margin-bottom: 8px;
+}
+.tip .tstats span {
+  display: block;
+  color: var(--mute);
+  font-size: 12px;
+}
+.tip .tstats b {
+  font: 700 15px 'Chakra Petch';
+  white-space: nowrap;
+}
+.tip p {
+  margin: 0 0 6px;
+  font-style: italic;
+  line-height: 1.4;
+}
+.tip .ttip {
+  font-style: normal;
+  color: var(--teal);
+  margin: 0;
+}
+#log {
+  height: 170px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+#log p {
+  margin: 0 0 3px;
+}
+#log .ai {
+  color: var(--pink);
+}
+#log .pet {
+  color: #ffa5d0;
+}
+#log .guide {
+  color: var(--teal);
+}
+#log .bad {
+  color: #ff8a98;
+}
+#log .kill {
+  color: var(--amber);
+}
+#log .dim {
+  color: var(--mute);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.card h2 {
+  font-size: 24px;
+}
+.card h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.row h3 {
+  margin: 0;
+}
+.lvl,
+.tag {
+  font-size: 13px;
+  color: var(--mute);
+}
+.meter {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin: 6px 0;
+}
+.meter b {
+  text-align: right;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.bar {
+  height: 10px;
+  background: #120b18;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.25s;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+.stats div {
+  background: #1a1124;
+  border-radius: 10px;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: space-between;
+}
+.status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 99px;
+  margin-left: 6px;
+}
+.status.psn {
+  background: #9be15d;
+  color: #132;
+}
+.status.ko {
+  background: #ff5a6e;
+  color: #200;
+}
+.stats.four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.stats span {
+  font-size: 13px;
+  color: var(--mute);
+}
+.stats small {
+  color: var(--teal);
+  font-size: 12px;
+}
+.stats b {
+  font: 700 18px 'Chakra Petch';
+}
+.plus {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--amber);
+  color: #2a1a00;
+  font-weight: 700;
+  cursor: pointer;
+}
+.plus[hidden] {
+  display: none;
+}
+.pts {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--amber);
+  min-height: 0;
+}
+.pts:empty {
+  display: none;
+}
+.gear {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 10px;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+.gear dt {
+  color: var(--mute);
+}
+.gear dd {
+  margin: 0;
+}
+.acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+.acts button,
+.pad button,
+.mbtn {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid #4a3860;
+  background: #30223f;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+.acts button:hover:not(:disabled),
+.pad button:hover {
+  background: #3d2c50;
+}
+.acts button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.acts button[hidden] {
+  display: none;
+}
+.acts em {
+  font-style: normal;
+  color: var(--amber);
+  font-weight: 600;
+}
+kbd {
+  font: 600 11px 'Chakra Petch';
+  background: #1a1124;
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--mute);
+}
+button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+.boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.boxes span {
+  font-size: 13px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  color: #1a0f00;
+  font-weight: 600;
+}
+.boxes .none {
+  color: var(--mute);
+  background: none;
+  padding: 0;
+  font-weight: 400;
+}
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  max-width: 240px;
+  margin: 0 auto;
+}
+.pad button {
+  font-size: 20px;
+  min-height: 50px;
+}
+.linkbtn {
+  display: block;
+  margin: 10px auto 0;
+  background: none;
+  border: 0;
+  color: var(--teal);
+  cursor: pointer;
+  min-height: 36px;
+  font-size: 14px;
+}
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 4, 12, 0.75);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 10;
+}
+.modal[hidden] {
+  display: none;
+}
+.mcard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.mcard h2 {
+  font-size: clamp(26px, 4vw, 36px);
+  margin-bottom: 10px;
+  text-wrap: balance;
+}
+.mcard p {
+  margin: 0 0 10px;
+}
+.mcard ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.mcard .sub {
+  color: var(--pink);
+  font: 700 14px 'Chakra Petch';
+  margin-bottom: 4px;
+}
+.keys {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  font-size: 14px;
+  margin: 8px 0 14px;
+}
+.mbtns {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.vs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0;
+}
+.vs em {
+  font: 700 20px 'Chakra Petch';
+  color: var(--pink);
+  font-style: normal;
+  padding: 0 4px;
+}
+.pcard {
+  background: #1a1124;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  min-width: 110px;
+}
+.pcard span {
+  font-size: 13px;
+  color: var(--mute);
+}
+.pcard.boss {
+  border-color: var(--pink);
+}
+.pcard.boss b {
+  color: var(--pink);
+}
+.aidesc {
+  font-style: italic;
+  border-left: 3px solid var(--pink);
+  padding-left: 10px;
+}
+.stars {
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+.stars i {
+  font-style: normal;
+}
+.mcard.wide {
+  max-width: 780px;
+}
+.opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 14px 0 4px;
+}
+.opt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  background: #1a1124;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  min-height: 44px;
+}
+.opt:hover:not(:disabled),
+.opt:focus-visible {
+  border-color: var(--pink);
+}
+.opt:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.opt b {
+  font: 700 17px 'Chakra Petch';
+}
+.opt .osub {
+  font-size: 12px;
+  color: var(--teal);
+}
+.opt .d {
+  font-size: 14px;
+  line-height: 1.4;
+}
+.opt em {
+  font-size: 12px;
+  color: var(--amber);
+  font-style: normal;
+}
+.mbtn.primary {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+  font-weight: 600;
+  padding: 8px 18px;
+}
+@media (max-width: 900px) {
+  .game {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .padcard {
+    order: -1;
+  }
+  .fig {
+    height: clamp(320px, 58vh, 600px);
+  }
+  #log {
+    height: 130px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live::before {
+    animation: none;
+  }
+  .toast,
+  .bar i {
+    transition: none;
+  }
+}

@@ -1761,12 +1761,115 @@ function tick(c) {
   }
 }
 
-// Generate floor f and place everyone on it. Layout: random rooms joined by L-shaped corridors.
-// Distances from the start room decide the stairwell (farthest), safe room (about halfway) and boss lairs.
+// Lay out floor f in G.map: rooms, corridors and two boss lairs. The lairs are dead-end side rooms with a
+// single doorway, picked from the far half of the floor, so the route from the start to the stairwell never
+// runs through one and you can't stumble into a boss before you've had a chance to level up.
+// Returns null if the layout fails validation; newFloor() just rolls again.
+function layFloor(f) {
+  const W = G.W,
+    H = G.H;
+  G.map.fill(WALL);
+  const rooms = [];
+  for (let t = 0; t < 1500 && rooms.length < 18 + f * 2; t++) {
+    const w = R(5, 10),
+      h = R(4, 7),
+      x = R(1, W - w - 2),
+      y = R(1, H - h - 2);
+    if (rooms.some(r => x < r.x + r.w + 1 && x + w + 1 > r.x && y < r.y + r.h + 1 && y + h + 1 > r.y)) continue;
+    rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
+  }
+  if (rooms.length < 12) return null;
+  rooms.sort((a, b) => a.cx - b.cx);
+  const start = rooms[0];
+  // Lairs come from the far half of the floor (by straight-line distance), never the very farthest room.
+  const far = r => Math.hypot(r.cx - start.cx, r.cy - start.cy);
+  const farHalf = rooms
+    .slice(1)
+    .sort((a, b) => far(b) - far(a))
+    .slice(1, Math.ceil(rooms.length / 2));
+  const bossRoom = pick(farHalf);
+  const rest = farHalf.filter(r => r !== bossRoom);
+  const boroughRoom = pick(rest.filter(r => r.w >= 6 && r.h >= 5)) || pick(rest);
+  const lairRooms = [bossRoom, boroughRoom].filter(Boolean);
+  const plain = rooms.filter(r => !lairRooms.includes(r));
+  for (const r of rooms)
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) G.map[idx(x, y)] = FLOOR;
+  // L-shaped corridor paths between room centers
+  const seg = (a, b, fixed, horiz) => {
+    const o = [];
+    for (let v = Math.min(a, b); v <= Math.max(a, b); v++) o.push(horiz ? [v, fixed] : [fixed, v]);
+    return o;
+  };
+  const lPath = (a, b, hFirst) =>
+    hFirst
+      ? [...seg(a.cx, b.cx, a.cy, true), ...seg(a.cy, b.cy, b.cx, false)]
+      : [...seg(a.cy, b.cy, a.cx, false), ...seg(a.cx, b.cx, b.cy, true)];
+  const carve = path => {
+    for (const [x, y] of path) G.map[idx(x, y)] = FLOOR;
+  };
+  const nearLair = ([x, y]) => lairRooms.some(r => x >= r.x - 1 && x <= r.x + r.w && y >= r.y - 1 && y <= r.y + r.h);
+  // Join two ordinary rooms, taking whichever bend stays clear of the lairs.
+  const link = (a, b) => {
+    const o = Math.random() < 0.5,
+      p1 = lPath(a, b, o),
+      p2 = lPath(a, b, !o);
+    carve(p1.some(nearLair) && !p2.some(nearLair) ? p2 : p1);
+  };
+  for (let i = 1; i < plain.length; i++) link(plain[i - 1], plain[i]);
+  for (let i = 0; i < 3 + f; i++) link(pick(plain), pick(plain));
+  // Each lair gets one spur from its nearest ordinary room; every other gap in its wall is bricked up.
+  for (const r of lairRooms) {
+    const from = plain.slice().sort((a, b) => Math.hypot(a.cx - r.cx, a.cy - r.cy) - Math.hypot(b.cx - r.cx, b.cy - r.cy))[0];
+    const path = lPath(from, r, Math.random() < 0.5);
+    carve(path);
+    const ring = (x, y) =>
+      x >= r.x - 1 && x <= r.x + r.w && y >= r.y - 1 && y <= r.y + r.h && !inRoom(r, x, y);
+    let door = null;
+    for (const [x, y] of path) if (ring(x, y)) door = [x, y];
+    for (let y = r.y - 1; y <= r.y + r.h; y++)
+      for (let x = r.x - 1; x <= r.x + r.w; x++)
+        if (ring(x, y) && !(door && x == door[0] && y == door[1])) G.map[idx(x, y)] = WALL;
+  }
+  // Validate: with the lairs blocked, every ordinary room must still be reachable from the start,
+  // and each lair's doorway must be reachable and not too close to the start.
+  const bfs = block => {
+    const dist = new Int32Array(W * H).fill(-1),
+      q = [idx(start.cx, start.cy)];
+    dist[q[0]] = 0;
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h],
+        x = i % W,
+        y = (i / W) | 0;
+      for (const [dx, dy] of DIRS) {
+        const nx = x + dx,
+          ny = y + dy,
+          n = idx(nx, ny);
+        if (tile(nx, ny) == WALL || dist[n] >= 0) continue;
+        if (block && lairRooms.some(r => inRoom(r, nx, ny))) continue;
+        dist[n] = dist[i] + 1;
+        q.push(n);
+      }
+    }
+    return dist;
+  };
+  const dist = bfs(true),
+    open = bfs(false),
+    d = r => dist[idx(r.cx, r.cy)];
+  if (plain.some(r => d(r) < 0) || lairRooms.some(r => open[idx(r.cx, r.cy)] < 0)) return null;
+  const others = plain.slice(1).sort((a, b) => d(b) - d(a));
+  const stairRoom = others[0],
+    maxD = d(stairRoom);
+  if (lairRooms.some(r => open[idx(r.cx, r.cy)] < maxD * 0.4)) return null;
+  const safeRoom = others.slice(1).sort((a, b) => Math.abs(d(a) - maxD / 2) - Math.abs(d(b) - maxD / 2))[0];
+  return { rooms, start, stairRoom, safeRoom, bossRoom, boroughRoom };
+}
+
+// Generate floor f and place everyone on it (layout from layFloor). Stairwell is the farthest ordinary room,
+// the safe room sits about halfway there.
 function newFloor(f) {
   G.floor = f;
-  const W = (G.W = 46 + f * 6),
-    H = (G.H = 32 + f * 4);
+  const W = (G.W = 64 + f * 6),
+    H = (G.H = 42 + f * 4);
   G.map = new Uint8Array(W * H);
   G.seen = new Uint8Array(W * H);
   G.vis = new Uint8Array(W * H);
@@ -1780,71 +1883,13 @@ function newFloor(f) {
   G.inSafe = false;
   G.floorKills = 0;
   G.floorViews = G.views;
-  G.turns = G.turnsMax = 600 + f * 150;
+  // Bigger floors with more to fight need a longer clock.
+  G.turns = G.turnsMax = 1000 + f * 200;
   G.camX = null;
   G.floorHurt = false;
-  let rooms = [];
-  // Place non-overlapping rooms; retry from scratch in the (rare) case too few fit.
-  for (let attempt = 0; rooms.length < 6 && attempt < 20; attempt++) {
-    rooms = [];
-    for (let t = 0; t < 500 && rooms.length < 12 + f * 2; t++) {
-      const w = R(5, 10),
-        h = R(4, 7),
-        x = R(1, W - w - 2),
-        y = R(1, H - h - 2);
-      if (rooms.some(r => x < r.x + r.w + 1 && x + w + 1 > r.x && y < r.y + r.h + 1 && y + h + 1 > r.y)) continue;
-      rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
-    }
-  }
-  for (const r of rooms)
-    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) G.map[idx(x, y)] = FLOOR;
-  const cH = (a, b, y) => {
-    for (let x = Math.min(a, b); x <= Math.max(a, b); x++) G.map[idx(x, y)] = FLOOR;
-  };
-  const cV = (a, b, x) => {
-    for (let y = Math.min(a, b); y <= Math.max(a, b); y++) G.map[idx(x, y)] = FLOOR;
-  };
-  const link = (a, b) => {
-    if (Math.random() < 0.5) {
-      cH(a.cx, b.cx, a.cy);
-      cV(a.cy, b.cy, b.cx);
-    } else {
-      cV(a.cy, b.cy, a.cx);
-      cH(a.cx, b.cx, b.cy);
-    }
-  };
-  rooms.sort((a, b) => a.cx - b.cx);
-  for (let i = 1; i < rooms.length; i++) link(rooms[i - 1], rooms[i]);
-  for (let i = 0; i < 3; i++) link(pick(rooms), pick(rooms));
-  // distances from start
-  const start = rooms[0],
-    dist = new Int32Array(W * H).fill(-1),
-    q = [idx(start.cx, start.cy)];
-  dist[q[0]] = 0;
-  for (let h = 0; h < q.length; h++) {
-    const i = q[h],
-      x = i % W,
-      y = (i / W) | 0;
-    for (const [dx, dy] of DIRS) {
-      const n = idx(x + dx, y + dy);
-      if (tile(x + dx, y + dy) != WALL && dist[n] < 0) {
-        dist[n] = dist[i] + 1;
-        q.push(n);
-      }
-    }
-  }
-  const d = r => dist[idx(r.cx, r.cy)];
-  const others = rooms.slice(1).sort((a, b) => d(b) - d(a));
-  const stairRoom = others[0],
-    maxD = d(stairRoom);
-  const safeRoom = others.slice(1).sort((a, b) => Math.abs(d(a) - maxD / 2) - Math.abs(d(b) - maxD / 2))[0];
-  const bossRoom = others.find(r => r !== stairRoom && r !== safeRoom);
-  const boroughRoom =
-    others
-      .slice()
-      .reverse()
-      .find(r => r !== stairRoom && r !== safeRoom && r !== bossRoom && r.w >= 6 && r.h >= 5 && d(r) > maxD * 0.3) ||
-    others.find(r => r !== stairRoom && r !== safeRoom && r !== bossRoom);
+  let L = null;
+  for (let attempt = 0; !L && attempt < 60; attempt++) L = layFloor(f);
+  const { rooms, start, stairRoom, safeRoom, bossRoom, boroughRoom } = L;
   G.lairs = [];
   for (let y = safeRoom.y; y < safeRoom.y + safeRoom.h; y++)
     for (let x = safeRoom.x; x < safeRoom.x + safeRoom.w; x++) G.map[idx(x, y)] = SAFE;
@@ -1861,7 +1906,7 @@ function newFloor(f) {
   const pool = spawnPool(f);
   for (const r of rooms) {
     if (r === start || r === safeRoom || r === bossRoom || r === boroughRoom) continue;
-    const n = R(0, 2 + (f > 1 ? 1 : 0));
+    const n = R(1, 3 + (f > 1 ? 1 : 0));
     for (let i = 0; i < n; i++) {
       const pos = freeIn(r);
       if (!pos) continue;
@@ -1890,7 +1935,8 @@ function newFloor(f) {
     G.lairs.push(lair);
     return b;
   };
-  const nb = makeLair(bossRoom, BOSS, mobLevel(BOSS.lvl, f) + 1, 2);
+  // The first Neighborhood Boss is a level gentler: it's the crawlers' first real test.
+  const nb = makeLair(bossRoom, BOSS, mobLevel(BOSS.lvl, f) + (f > 1 ? 1 : 0), 2);
   if (nb && f > 1) {
     nb.name = pick(['Chef Rancid', 'The Gravy Baron', 'Sister Mildew']);
     nb.desc = `${nb.name} runs this floor’s neighborhood like a cafeteria from your worst nightmares. The menu is you.`;
@@ -1906,7 +1952,7 @@ function newFloor(f) {
       bb.desc = d0 + ' It guards a stairwell.';
     }
   }
-  for (let i = 0; i < 6 + f; i++) {
+  for (let i = 0; i < 10 + f * 2; i++) {
     const r = pick(rooms.slice(1));
     const pos = freeIn(r);
     if (pos) G.items.push({ ...pos, k: pick(['potion', 'potion', 'bomb', 'bomb', 'box_bronze', 'potion', 'potion']) });
@@ -2082,7 +2128,8 @@ function gainXP(c, n) {
   while (c.xp >= c.next) {
     c.xp -= c.next;
     c.lvl++;
-    c.next = Math.round(c.next * 1.5 + 10);
+    // Gentle early curve (20, 36, 58, 87, 126 ...) so a well-explored floor is worth a few levels.
+    c.next = Math.round(c.next * 1.35 + 9);
     if (c === G.pet) {
       c.str++;
       c.int++;
@@ -3186,6 +3233,28 @@ function move(dx, dy) {
     ui();
     return;
   }
+  // Stepping into a boss lair seals it, so ask first (once per lair).
+  const lair = G.lairs.find(
+    L => !L.sealed && !L.ok && G.mobs.includes(L.boss) && inRoom(L.room, nx, ny) && !inRoom(L.room, p.x, p.y),
+  );
+  if (lair) {
+    const b = lair.boss,
+      gap = b.level - p.lvl;
+    modal(
+      `<h2>Boss lair ahead</h2><p><b>${b.name}</b>, level ${b.level} ${b.tier} Boss, is waiting inside with ${lair.minions.filter(m => G.mobs.includes(m)).length} minion(s). You are level ${p.lvl}; ${NAMES.pet} is level ${G.pet.lvl}.</p><p class="lvl">Once you step in, the doors seal until the boss is dead.${gap >= 3 ? ' You look badly outmatched. Clearing more of the floor first would help.' : ''}${b.tier == 'Borough' ? ' This boss is optional.' : ''}</p>`,
+      [
+        { label: 'Not yet', primary: 1 },
+        {
+          label: 'Enter the lair',
+          fn: () => {
+            lair.ok = true;
+            move(dx, dy);
+          },
+        },
+      ],
+    );
+    return;
+  }
   const pt = G.pet;
   if (!pt.down && pt.x == nx && pt.y == ny) {
     pt.x = p.x;
@@ -3885,7 +3954,7 @@ function finishSelection() {
 function help() {
   modal(
     `<h2>Welcome, crawler</h2><p>The surface is gone. What's left of humanity is being herded through a dungeon for the galaxy's most popular reality show. You're ${NAMES.hero}. Your companion, ${NAMES.pet}, is along for the ride.</p>
-<ul><li><b>Find the stairwell</b> (glowing cyan steps) before the timer hits zero, or the floor collapses on you.</li><li><b>Bosses.</b> Every floor has a Neighborhood Boss and a tougher, optional Borough Boss that guards a second stairwell. Walk into a lair and the doors seal until the boss is dead. Each crawler gets a Boss Box and a star, the boss drops a map or field guide, and finishing a boss fight under 10% HP earns a Survivor’s Box.</li><li><b>Map.</b> Read the official dungeon sign near the start to upgrade your basic minimap. It shows what you’ve explored. Safe rooms always appear on it, even under fog of war, but stairwells don’t until you’ve seen them. Press M (or click the map) to cycle it: small, full floor with its four neighborhoods, then off. A boss’s Neighborhood Map fills in its entire neighborhood, monsters included.</li><li><b>Safe rooms</b> (warm amber floors) keep monsters out. Rest and open loot boxes there.</li><li><b>Achievements and loot boxes.</b> Most achievements are the real Floor 1 ones from the books. Boxes come in six tiers (Bronze, Silver, Gold, Platinum, Legendary, Celestial) and many types: Weapon, Apparel, Goblin (explosives), Magic Item, Pet (gear for Donut), Survivor’s, Boss, and Benefactor Boxes from patrons, which hold the rarest gear. Your first kill unlocks experience.</li><li><b>Neutral monsters and factions.</b> Monsters with a white ring (white on the minimap) are neutral. They ignore you until you attack them, and then their whole crew turns on you. Bad Llamas and goblins are at war and fight on sight. Your highest-Charisma crawler can charm hostile monsters.</li><li><b>Race and class.</b> On Floor 3 you pick a race and class for Carl, and a class for Donut. Banked points cover the class’s minimum stats first, and some classes need achievements to unlock (Bomb Squad Tech needs Boom!).</li><li>Walk into a monster to attack it. ${NAMES.pet} fights on her own: she scratches, fires Magic Missile, eats kibble when hurt, and her Charisma can <b>charm</b> monsters so they stop fighting.</li><li><b>Five stats.</b> STR is melee damage. INT sets your mana pool (MP ≈ INT) and how fast it refills. CON sets HP and your potion cooldown, and drinking a potion before the cooldown ends poisons you. DEX is accuracy, dodging and crits. CHA is charm.</li><li><b>Spells cost mana and level up with use</b>, faster in real fights. Magic Missile costs 5 MP; at level 5 she picks 3–6 MP per shot, and at level 10 it can set things on fire. Missiles can miss and do half damage to bosses. No spellcasting inside safe rooms. You start with Heal (3 MP, key C).</li><li><b>Leveling.</b> Each of you earns your own XP (full XP for the killer, a 25% share for the partner). ${NAMES.pet}’s Enhanced Growth automatically gives her +1 STR, +1 INT and +2 CHA per level. Your 3 points per level are banked until race and class selection on Floor 3.</li><li><b>Loot depends on race.</b> Your boxes hold human gear (weapons, armor, charms, potions, bombs). Hers hold cat gear (claws, collars, charms, kibble, spell tomes).</li></ul>
+<ul><li><b>Find the stairwell</b> (glowing cyan steps) before the timer hits zero, or the floor collapses on you.</li><li><b>Bosses.</b> Every floor has a Neighborhood Boss and a tougher, optional Borough Boss that guards a second stairwell. Lairs are dead-end side rooms, never on the route to the stairwell, so you can clear the rest of the floor and level up first. Step into one and the game asks before the doors seal you in until the boss is dead. Each crawler gets a Boss Box and a star, the boss drops a map or field guide, and finishing a boss fight under 10% HP earns a Survivor’s Box.</li><li><b>Map.</b> Read the official dungeon sign near the start to upgrade your basic minimap. It shows what you’ve explored. Safe rooms always appear on it, even under fog of war, but stairwells don’t until you’ve seen them. Press M (or click the map) to cycle it: small, full floor with its four neighborhoods, then off. A boss’s Neighborhood Map fills in its entire neighborhood, monsters included.</li><li><b>Safe rooms</b> (warm amber floors) keep monsters out. Rest and open loot boxes there.</li><li><b>Achievements and loot boxes.</b> Most achievements are the real Floor 1 ones from the books. Boxes come in six tiers (Bronze, Silver, Gold, Platinum, Legendary, Celestial) and many types: Weapon, Apparel, Goblin (explosives), Magic Item, Pet (gear for Donut), Survivor’s, Boss, and Benefactor Boxes from patrons, which hold the rarest gear. Your first kill unlocks experience.</li><li><b>Neutral monsters and factions.</b> Monsters with a white ring (white on the minimap) are neutral. They ignore you until you attack them, and then their whole crew turns on you. Bad Llamas and goblins are at war and fight on sight. Your highest-Charisma crawler can charm hostile monsters.</li><li><b>Race and class.</b> On Floor 3 you pick a race and class for Carl, and a class for Donut. Banked points cover the class’s minimum stats first, and some classes need achievements to unlock (Bomb Squad Tech needs Boom!).</li><li>Walk into a monster to attack it. ${NAMES.pet} fights on her own: she scratches, fires Magic Missile, eats kibble when hurt, and her Charisma can <b>charm</b> monsters so they stop fighting.</li><li><b>Five stats.</b> STR is melee damage. INT sets your mana pool (MP ≈ INT) and how fast it refills. CON sets HP and your potion cooldown, and drinking a potion before the cooldown ends poisons you. DEX is accuracy, dodging and crits. CHA is charm.</li><li><b>Spells cost mana and level up with use</b>, faster in real fights. Magic Missile costs 5 MP; at level 5 she picks 3–6 MP per shot, and at level 10 it can set things on fire. Missiles can miss and do half damage to bosses. No spellcasting inside safe rooms. You start with Heal (3 MP, key C).</li><li><b>Leveling.</b> Each of you earns your own XP (full XP for the killer, a 25% share for the partner). ${NAMES.pet}’s Enhanced Growth automatically gives her +1 STR, +1 INT and +2 CHA per level. Your 3 points per level are banked until race and class selection on Floor 3.</li><li><b>Loot depends on race.</b> Your boxes hold human gear (weapons, armor, charms, potions, bombs). Hers hold cat gear (claws, collars, charms, kibble, spell tomes).</li></ul>
 <div class="keys"><kbd>Arrows / WASD / HJKL</kbd><span>Move or attack (YUBN or numpad for diagonals)</span><kbd>. or 5</kbd><span>Wait a turn</span><kbd>Q</kbd><span>Drink a potion (watch the cooldown)</span><kbd>C</kbd><span>Cast Heal</span><kbd>F</kbd><span>Cast Magic Missile (if your class has it)</span><kbd>T</kbd><span>Throw a bomb at the nearest visible enemy</span><kbd>M</kbd><span>Cycle the map: small, full floor, off</span><kbd>R</kbd><span>Rest (safe room, costs 40 turns)</span><kbd>O</kbd><span>Open loot boxes (safe room)</span><kbd>&gt;</kbd><span>Take the stairs</span></div>
 <p>On a touchscreen, tap the map to step toward that spot, or use the pad.</p>`,
     [{ label: 'Enter the dungeon', primary: 1 }],

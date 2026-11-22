@@ -13,7 +13,7 @@ A turn-based, tile-based roguelike inspired by Matt Dinniman's *Dungeon Crawler 
 - **Book-style stats and magic**: STR, INT, CON, DEX and CHA. Spells cost mana and level up with use (Magic Missile, Heal, Second Chance). Potions have a CON-based cooldown, and drinking too early causes potion sickness.
 - **Monster families with roles**: goblins (Bomb Bards, Shamankas, War Chieftains), rat-kin (janitor rats that eat corpses and grow), bats, a loot-vacuuming robot and neutral Bad Llamas at war with the goblins.
 - **Charisma and factions**: charm hostile monsters; neutral monsters turn on you only when provoked.
-- **Bosses**: a Neighborhood Boss and an optional Borough Boss on every floor, in lairs that seal shut, with Boss Boxes, stars and persistent loot (maps and field guides).
+- **Bosses**: a Neighborhood Boss and an optional Borough Boss on every floor, in dead-end lairs off the main route (you get a warning before one seals shut), with Boss Boxes, stars and persistent loot (maps and field guides).
 - **Achievements and loot boxes**: Floor 1 achievements adapted from the series, with six box tiers (Bronze to Celestial) and box types such as Weapon, Apparel, Goblin, Pet, Boss, Survivor's and Benefactor.
 - **Race and class selection on Floor 3**: banked stat points cover class minimums, and some classes unlock through achievements.
 - **Minimap**: upgraded by reading a dungeon sign; cycles between small, full-floor and off. Safe rooms always show.

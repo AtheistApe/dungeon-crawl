@@ -2301,6 +2301,12 @@ function bossDefeated(m) {
   toast('Boss defeated', m.name);
 }
 // Lairs seal when a crawler walks in; nobody leaves until the boss is dead
+// A boss and its minions sit behind the lair's System barrier until the lair seals: nothing outside can hurt
+// them (melee, spells, bombs, fire, other monsters) and they don't attack out through the doorway.
+function shielded(m) {
+  const L = m.lair || (m.minionOf && m.minionOf.lair);
+  return !!L && !L.sealed && G.mobs.includes(L.boss);
+}
 function checkLair() {
   const p = G.player;
   for (const L of G.lairs) {
@@ -2620,7 +2626,7 @@ function petAct() {
     award('pet_snack');
     return;
   }
-  const hostile = m => m.hostile && !m.charmed && !m.ally;
+  const hostile = m => m.hostile && !m.charmed && !m.ally && !shielded(m);
   const adj = G.mobs.filter(m => hostile(m) && cheb(m, pt) == 1);
   if (adj.length) {
     const m = adj.sort((a, b) => a.hp - b.hp)[0];
@@ -2809,7 +2815,7 @@ function hurt(c, d, cause) {
 function blast(cx, cy, d, src, color) {
   G.fx.push({ k: 'boom', x: cx, y: cy, t: performance.now(), col: color });
   for (const o of G.mobs.slice())
-    if (o !== src && Math.abs(o.x - cx) <= 1 && Math.abs(o.y - cy) <= 1) {
+    if (o !== src && Math.abs(o.x - cx) <= 1 && Math.abs(o.y - cy) <= 1 && !shielded(o)) {
       o.hp -= d;
       o.foe = o.fam !== src.fam ? src : o.foe;
       float(o.x, o.y, d, '#ffb347');
@@ -2881,6 +2887,7 @@ function strike(m, t, d, cause) {
     hurt(t, d, cause);
     return;
   }
+  if (shielded(t) || shielded(m)) return;
   t.hp -= d;
   t.foe = m;
   t.awake = true;
@@ -3095,6 +3102,7 @@ function mobTurn(m) {
   }
   if (m.anguish > 0) m.anguish--;
   if (m.cd > 0) m.cd--;
+  if (shielded(m)) return; // waits behind the barrier until the lair seals
   if (!m.awake && seen(m) && cheb(m, p) <= 7) {
     m.awake = true;
     tryCharm(m);
@@ -3219,6 +3227,10 @@ function move(dx, dy) {
       p.x = nx;
       p.y = ny;
       endTurn();
+      return;
+    }
+    if (shielded(m)) {
+      log(`A shimmering System barrier fills the lair doorway. You can't touch the ${m.name} until you step inside and the lair seals.`, 'dim');
       return;
     }
     playerAttack(m);
@@ -3420,7 +3432,14 @@ function castMissile() {
   }
   const tg = G.mobs
     .filter(
-      m => m.hostile && !m.charmed && !m.ally && G.vis[idx(m.x, m.y)] && cheb(m, p) <= 7 && los(p.x, p.y, m.x, m.y),
+      m =>
+        m.hostile &&
+        !m.charmed &&
+        !m.ally &&
+        !shielded(m) &&
+        G.vis[idx(m.x, m.y)] &&
+        cheb(m, p) <= 7 &&
+        los(p.x, p.y, m.x, m.y),
     )
     .sort((a, b) => cheb(a, p) - cheb(b, p))[0];
   if (!tg) {
@@ -3445,7 +3464,14 @@ function bomb() {
   }
   const tg = G.mobs
     .filter(
-      m => m.hostile && !m.charmed && !m.ally && G.vis[idx(m.x, m.y)] && cheb(m, p) <= 6 && los(p.x, p.y, m.x, m.y),
+      m =>
+        m.hostile &&
+        !m.charmed &&
+        !m.ally &&
+        !shielded(m) &&
+        G.vis[idx(m.x, m.y)] &&
+        cheb(m, p) <= 6 &&
+        los(p.x, p.y, m.x, m.y),
     )
     .sort((a, b) => cheb(a, p) - cheb(b, p))[0];
   if (!tg) {
@@ -3462,7 +3488,7 @@ function bomb() {
   G.shake = reduced ? 0 : 10;
   log(`You light a bomb and lob it at the ${tg.name}. BOOM.`, 'kill');
   for (const m of G.mobs.slice())
-    if (Math.abs(m.x - cx) <= 1 && Math.abs(m.y - cy) <= 1) {
+    if (Math.abs(m.x - cx) <= 1 && Math.abs(m.y - cy) <= 1 && !shielded(m)) {
       m.hp -= d;
       m.awake = true;
       provoke(m);
